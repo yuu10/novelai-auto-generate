@@ -2,6 +2,10 @@
 (function () {
   'use strict';
 
+  // 間隔の下限（秒）。NovelAI に負荷をかけすぎないよう、これより短くはできない
+  const MIN_INTERVAL_SEC = 3;
+  const clampInterval = v => Math.max(MIN_INTERVAL_SEC, Number(v) || 0);
+
   // ---- 設定（パネルから変更でき、chrome.storage に保存されます） ----
   const settings = {
     intervalSec: 3,   // 生成が終わってから次を押すまでの待ち時間（秒）
@@ -148,7 +152,7 @@
       timer = setTimeout(waitDone, 500);
     } else {
       setStatus(`待機中 ${settings.intervalSec} 秒… (${count} 回)`);
-      timer = setTimeout(tick, settings.intervalSec * 1000);
+      timer = setTimeout(tick, clampInterval(settings.intervalSec) * 1000);
     }
   }
 
@@ -238,7 +242,7 @@
       <div id="nai-auto-body" style="margin-top:6px">
         <div style="display:grid !important;grid-template-columns:auto auto !important;gap:5px 8px !important;align-items:center !important">
           <label for="nai-auto-int">間隔</label>
-          <span style="${boxCss}"><input id="nai-auto-int" type="number" min="0" style="${inputCss}"><span style="${hintCss}">秒</span></span>
+          <span style="${boxCss}"><input id="nai-auto-int" type="number" min="${MIN_INTERVAL_SEC}" style="${inputCss}"><span style="${hintCss}">秒</span></span>
           <label for="nai-auto-max">最大回数</label>
           <span style="${boxCss}"><input id="nai-auto-max" type="number" min="0" style="${inputCss}"><span style="${hintCss}">0=無制限</span></span>
           <label for="nai-auto-hours">連続上限</label>
@@ -281,6 +285,8 @@
       chrome.storage.local.get({ ...settings, ui }, saved => {
         const { ui: savedUi, ...savedSettings } = saved;
         Object.assign(settings, savedSettings);
+        // 下限を設ける前のバージョンで保存した短い間隔も、下限まで引き上げる
+        settings.intervalSec = clampInterval(settings.intervalSec);
         if (savedUi) {
           ui.pos = { ...DEFAULT_POS, ...savedUi.pos };
           ui.collapsed = !!savedUi.collapsed;
@@ -292,7 +298,9 @@
 
     $('nai-auto-toggle').onclick = () => {
       if (running) return stop('手動');
-      settings.intervalSec = Math.max(0, Number($('nai-auto-int').value) || 0);
+      // 下限（3 秒）より短い値や空欄は 3 秒にする
+      settings.intervalSec = clampInterval($('nai-auto-int').value);
+      $('nai-auto-int').value = settings.intervalSec;
       settings.maxCount = Math.max(0, Number($('nai-auto-max').value) || 0);
       // リミッターなので無制限にはできない。0 以下や空欄は既定の 1 時間、24 時間を超えたら 24 時間にする
       const hours = Number($('nai-auto-hours').value);
